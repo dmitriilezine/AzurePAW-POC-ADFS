@@ -1,8 +1,617 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
-  "parameters": {},
-  "variables": {},
-  "resources": [],
+  "parameters": {
+    "subscriptionID": {
+      "type": "string",
+      "metadata": {
+        "description": "Subscription ID is used to provide access path to the Key Vault"
+      },
+      "defaultValue": "Copy and Paste Subscription ID here. It is provided on the instructions OneNote page."
+    },
+    "domainName": {
+      "type": "string",
+      "metadata": {
+        "description": "Current deployment supports top level domain name only, for example contoso.com, fabrikam.com etc"
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Administrator of the new VMs and Domain"
+      },
+      "defaultValue": "labadmin"
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The password for the Administrator account of the new VMs and Domain. If you do not change it, then it will look like this: Subscription#SUBSCRIPTIONID"
+      },
+      "defaultValue": "[concat('Subscription#',subscription().subscriptionId)]"
+    },
+    "existingVirtualNetworkName": {
+      "type": "string",
+      "defaultValue": "Add existing vNet Name where this deployment will be deployed to",
+      "metadata": {
+        "description": "Specify the name for the vNet to whcih this server will be deployed."
+      }
+    },
+    "existingVirtualNetworkResourceGroup": {
+      "type": "string",
+      "defaultValue": "Add vNet RG Name",
+      "metadata": {
+        "description": "Name of the existing VNET resource group"
+      }
+    },
+    "ADFSubnetName": {
+      "type": "string",
+      "defaultValue": "Add Subnet Name where ADFS will be deployed in vNet -> ADFS...",
+      "metadata": {
+        "description": "Name of the subnet in the virtual network you want to put this VM"
+      }
+    },
+    "WAPSubnetName": {
+      "type": "string",
+      "defaultValue": "Add Subnet Name where ADFS Proxy will be deployed in vNet -> ADFSProxy...",
+      "metadata": {
+        "description": "Name of the subnet in the virtual network you want to put this VM"
+      }
+    },
+    "vaultName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Key Vault where secrets are stored"
+      }
+    },
+    "KeyVaultRG": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the RG where Key Vault is stored"
+      }
+    },
+    "CertID": {
+      "type": "string",
+      "metadata": {
+        "description": "The cert container and id from the AKV, for example mycertcontainer/453l4k5j3lk45jk235jl3k5j34 "
+      }
+    },
+    "ADFSServiceCert": {
+      "type": "string",
+      "metadata": {
+        "description": "subject name of the external cert for ADFS "
+      }
+    },
+    "VirtualMachineSize": {
+      "type": "string",
+      "allowedValues": [
+        "Standard_DS12_v2",
+        "Standard_A2"
+      ],
+      "metadata": {
+        "description": "VM Size. The bigger it is, the more $ you will spend."
+      },
+      "defaultValue": "Standard_A2"
+    },
+    "vNetIPSpace": {
+      "type": "string",
+      "defaultValue": "10.0",
+      "allowedValues": [
+        "10.0",
+        "10.1",
+        "10.2",
+        "10.3"
+      ],
+      "metadata": {
+        "description": "Specify the IP space for the vNet."
+      }
+    },
+    "adfs1VMName": {
+      "type": "string",
+      "metadata": {
+        "description": "Must be compliant with Windows Server naming convention"
+      },
+      "defaultValue": "ADFS1-LAB"
+    },
+    "adfs2VMName": {
+      "type": "string",
+      "metadata": {
+        "description": "Must be compliant with Windows Server naming convention"
+      },
+      "defaultValue": "ADFS2-LAB"
+    },
+    "adfsProxy1VMName": {
+      "type": "string",
+      "metadata": {
+        "description": "Must be compliant with Windows Server naming convention"
+      },
+      "defaultValue": "ADFSP1-LAB"
+    },
+    "adfsProxy2VMName": {
+      "type": "string",
+      "metadata": {
+        "description": "Must be compliant with Windows Server naming convention"
+      },
+      "defaultValue": "ADFSP2-LAB"
+    }
+  },
+  "variables": {
+    "assetLocation": "https://raw.githubusercontent.com/dmitriilezine/AzurePAW-POC-ADFS/master/AzurePAW-POC-ADFS",
+    "assetLocationStorageAccount": "https://azurepaw.blob.core.windows.net",
+    "VMSize": "[parameters('VirtualMachineSize')]",
+    "OSVersion": "2016-Datacenter",
+
+    "ADFSsubnetID": "[resourceId(parameters('existingVirtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('existingVirtualNetworkName'), parameters('ADFSubnetName'))]",
+    "WAPsubnetID": "[resourceId(parameters('existingVirtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('existingVirtualNetworkName'), parameters('WAPSubnetName'))]",
+
+    "primaryADFSIpAddress": "[concat(parameters('vNetIPSpace'),'.5.4')]",
+    "primaryADFS2IpAddress": "[concat(parameters('vNetIPSpace'),'.5.5')]",
+    "primaryADFSProxyIpAddress": "[concat(parameters('vNetIPSpace'),'.6.4')]",
+    "primaryADFSProxy2IpAddress": "[concat(parameters('vNetIPSpace'),'.6.5')]",
+
+    "ilbADFSprivateIPAddress": "[concat(parameters('vNetIPSpace'),'.5.100')]",
+    "ilbADFSProxyprivateIPAddress": "[concat(parameters('vNetIPSpace'),'.6.100')]",
+
+    "ilbTemplateURL": "[concat(variables('assetLocation'),'/data/ilbDeployment.json')]",
+    "adfsVMTemplateURL": "[concat(variables('assetLocation'),'/data/adfsVm.json')]",
+    "adfsProxyVMTemplateURL": "[concat(variables('assetLocation'),'/data/adfsProxyVm.json')]",
+    "adfsFarmTemplatesTemplateURL": "[concat(variables('assetLocation'),'/data/adfsfarm.json')]",
+    "deployADFSTemplateURL": "[concat(variables('assetLocation'),'/data/deployADFS.json')]",
+    "deployADFS2TemplateURL": "[concat(variables('assetLocation'),'/data/deployADFSonSecondVM.json')]",
+    "deployADFSProxyTemplateURL": "[concat(variables('assetLocation'),'/data/deployADFSProxy.json')]",
+
+    "adfsVMName": "[parameters('adfs1VMName')]",
+    "adfsVM2Name": "[parameters('adfs2VMName')]",
+    "adfsProxyVMName": "[parameters('adfsProxy1VMName')]",
+    "adfsProxyVM2Name": "[parameters('adfsProxy2VMName')]",
+
+    "deployILBforADFS": "DeployILBforADFS",
+    "deployILBforADFSId": "[concat('Microsoft.Resources/deployments/', variables('deployILBforADFS'))]",
+    "deployILBforADFSProxy": "DeployILBforADFSProxy",
+    "deployILBforADFSProxyId": "[concat('Microsoft.Resources/deployments/', variables('deployILBforADFSProxy'))]",
+
+    "adfsVmDeployment": "CreateADFSVM",
+    "adfsVmDeploymentId": "[concat('Microsoft.Resources/deployments/', variables('adfsVmDeployment'))]",
+    "adfsVm2Deployment": "CreateADFSVM2",
+    "adfsVm2DeploymentId": "[concat('Microsoft.Resources/deployments/', variables('adfsVm2Deployment'))]",
+    "adfsProxyVmDeployment": "CreateADFSProxyVM",
+    "adfsProxyVmDeploymentId": "[concat('Microsoft.Resources/deployments/', variables('adfsProxyVmDeployment'))]",
+    "adfsProxyVm2Deployment": "CreateADFSProxyVM2",
+    "adfsProxyVm2DeploymentId": "[concat('Microsoft.Resources/deployments/', variables('adfsProxyVm2Deployment'))]",
+
+    "adfsFarmTemplatesDeployment": "DeployADFSFarm",
+    "adfsFarmTemplatesDeploymentId": "[concat('Microsoft.Resources/deployments/', variables('adfsFarmTemplatesDeployment'))]",
+    "adfsFarmTemplatesDeploymentonVM2": "DeployADFSFarmonVM2",
+    "adfsFarmTemplatesDeploymentonVM2Id": "[concat('Microsoft.Resources/deployments/', variables('adfsFarmTemplatesDeploymentonVM2'))]",
+
+    "shortDomainName": "[split(parameters('domainName'),'.')[0]]",
+    "domainSuffix": "[split(parameters('domainName'),'.')[1]]",
+    "ouPathT0Devices": "[concat('OU=T0-Devices; OU=Tier 0; OU=Admin;', 'DC=',variables('shortDomainName'),'; DC=',variables('domainSuffix'))]",
+    "ouPathAdmin": "[concat('OU=Admin;', 'DC=',variables('shortDomainName'),'; DC=',variables('domainSuffix'))]",
+    "ouPathHGS": "[concat('OU=T0-HGS; OU=T0-Servers; OU=Tier 0; OU=Admin;', 'DC=',variables('shortDomainName'),'; DC=',variables('domainSuffix'))]",
+    "ouPathT0Idenity": "[concat('OU=T0-Identity; OU=T0-Servers; OU=Tier 0; OU=Admin;', 'DC=',variables('shortDomainName'),'; DC=',variables('domainSuffix'))]",
+    "ouPathNone": "",
+
+    "configurationFunctionDSConADFSvm1": "DeployADFS.ps1\\InstallADFSFarm",
+    "configurationFunctionDSConADFSvm2": "DeployADFS.ps1\\InstallADFSFarmonADFSvm2",
+
+    "vaultName": "[parameters('vaultName')]",
+    "secretName": "AzurePAWPOC1SAKey2",
+    "secretnameSASurl": "AzurePAWPOC1SAS",
+    "KeyVaultRG": "[parameters('KeyVaultRG')]",
+    "keyVaultID": "[concat('/subscriptions/', parameters('subscriptionID'), '/resourceGroups/', variables('KeyVaultRG'), '/providers/Microsoft.KeyVault/vaults/', variables('vaultName'))]",
+    "CertForADFS": "[concat('https://', parameters('vaultName'), '.vault.azure.net:443/secrets/', parameters('certID'))]",
+
+    "adfsAvailabilitySetName": "adfsAvailabiltySet",
+    "adfsProxyAvailabilitySetName": "adfsProxyAvailabiltySet",
+
+    "imageOffer": "WindowsServer",
+    "imagePublisher": "MicrosoftWindowsServer",
+
+    "ilbADFSName": "[concat('ilbADFS',resourceGroup().name)]",
+    "ilbADFSID": "[resourceId('Microsoft.Network/loadBalancers',variables('ilbADFSName'))]",
+    "ilbADFSProxyName": "[concat('ilbADFSProxy',resourceGroup().name)]",
+    "ilbADFSProxyID": "[resourceId('Microsoft.Network/loadBalancers',variables('ilbADFSProxyName'))]",
+
+    "adfsNICName": "[concat('ADFS-Nic',resourceGroup().name)]",
+    "adfs2NICName": "[concat('ADFS2-Nic',resourceGroup().name)]",
+    "adfsproxyNICName": "[concat('ADFSP-Nic',resourceGroup().name)]",
+    "adfsproxy2NICName": "[concat('ADFSP2-Nic',resourceGroup().name)]"
+
+  },
+  "resources": [
+    {
+      "name": "[variables('adfsAvailabilitySetName')]",
+      "type": "Microsoft.Compute/availabilitySets",
+      "apiVersion": "2017-03-30",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "PlatformUpdateDomainCount": 3,
+        "PlatformFaultDomainCount": 2
+      },
+      "sku": {
+        "name": "Aligned"
+      }
+    },
+    {
+      "name": "[variables('adfsProxyAvailabilitySetName')]",
+      "type": "Microsoft.Compute/availabilitySets",
+      "apiVersion": "2017-03-30",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "PlatformUpdateDomainCount": 3,
+        "PlatformFaultDomainCount": 2
+      },
+      "sku": {
+        "name": "Aligned"
+      }
+    },
+    {
+      "name": "[variables('deployILBforADFS')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[variables('ilbTemplateURL')]" },
+        "parameters": {
+          "ilbName": { "value": "[variables('ilbADFSName')]" },
+          "subnetResourceID": { "value": "[variables('ADFSsubnetID')]" },
+          "ilbPrivateIPAddress": { "value": "[variables('ilbADFSprivateIPAddress')]" }
+        }
+      }
+    },
+    {
+      "name": "[variables('deployILBforADFSProxy')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[variables('ilbTemplateURL')]" },
+        "parameters": {
+          "ilbName": { "value": "[variables('ilbADFSProxyName')]" },
+          "subnetResourceID": { "value": "[variables('WAPsubnetID')]" },
+          "ilbPrivateIPAddress": { "value": "[variables('ilbADFSProxyprivateIPAddress')]" }
+        }
+      }
+    },
+    {
+      "comments": "Deploy ADFS VM",
+      "name": "[variables('adfsVmDeployment')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('adfsVMTemplateURL')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "subnetResourceID": {
+            "value": "[variables('ADFSsubnetID')]"
+          },
+          "windowsImageSKU": {
+            "value": "[variables('OSVersion')]"
+          },
+          "vmName": {
+            "value": "[variables('adfsVMName')]"
+          },
+          "vmSize": {
+            "value": "[variables('VMSize')]"
+          },
+          "NicName": {
+            "value": "[variables('adfsNICName')]"
+          },
+          "primaryIpAddress": {
+            "value": "[variables('primaryADFSIpAddress')]"
+          },
+          "domainName": {
+            "value": "[parameters('domainName')]"
+          },
+          "availabilitySetName": {
+            "value": "[variables('adfsAvailabilitySetName')]"
+          },
+          "keyVaultID": {
+            "value": "[variables('keyVaultID')]"
+          },
+          "CertForADFS": {
+            "value": "[variables('CertForADFS')]"
+          },
+          "ouPath": {
+            "value": "[variables('ouPathAdmin')]"
+          },
+          "ilbID": {
+            "value": "[variables('ilbADFSID')]"
+          }
+        }
+      }
+    },
+    {
+      "comments": "Deploy ADFS VM 2",
+      "name": "[variables('adfsVm2Deployment')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('adfsVMTemplateURL')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "subnetResourceID": {
+            "value": "[variables('ADFSsubnetID')]"
+          },
+          "windowsImageSKU": {
+            "value": "[variables('OSVersion')]"
+          },
+          "vmName": {
+            "value": "[variables('adfsVM2Name')]"
+          },
+          "vmSize": {
+            "value": "[variables('VMSize')]"
+          },
+          "NicName": {
+            "value": "[variables('adfs2NICName')]"
+          },
+          "primaryIpAddress": {
+            "value": "[variables('primaryADFS2IpAddress')]"
+          },
+          "domainName": {
+            "value": "[parameters('domainName')]"
+          },
+          "availabilitySetName": {
+            "value": "[variables('adfsAvailabilitySetName')]"
+          },
+          "keyVaultID": {
+            "value": "[variables('keyVaultID')]"
+          },
+          "CertForADFS": {
+            "value": "[variables('CertForADFS')]"
+          },
+          "ouPath": {
+            "value": "[variables('ouPathAdmin')]"
+          },
+          "ilbID": {
+            "value": "[variables('ilbADFSID')]"
+          }
+        }
+      }
+    },
+    {
+      "comments": "Deploy ADFS Proxy VM. It is deployed if ADFS VM is deployed first.",
+      "name": "[variables('adfsProxyVmDeployment')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "dependsOn": [
+        "[variables('adfsVmDeployment')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('adfsproxyVMTemplateURL')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "subnetResourceID": {
+            "value": "[variables('WAPsubnetID')]"
+          },
+          "windowsImageSKU": {
+            "value": "[variables('OSVersion')]"
+          },
+          "vmName": {
+            "value": "[variables('adfsProxyVMName')]"
+          },
+          "vmSize": {
+            "value": "[variables('VMSize')]"
+          },
+          "NicName": {
+            "value": "[variables('adfsproxyNICName')]"
+          },
+          "primaryIpAddress": {
+            "value": "[variables('primaryADFSProxyIpAddress')]"
+          },
+          "domainName": {
+            "value": "[parameters('domainName')]"
+          },
+          "availabilitySetName": {
+            "value": "[variables('adfsProxyAvailabilitySetName')]"
+          },
+          "ouPath": {
+            "value": "[variables('ouPathT0Idenity')]"
+          },
+          "ilbID": {
+            "value": "[variables('ilbADFSProxyID')]"
+          }
+        }
+      }
+    },
+    {
+      "comments": "Deploy ADFS Proxy VM 2. It is deployed if ADFS VM is deployed first.",
+      "name": "[variables('adfsProxyVm2Deployment')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "dependsOn": [
+        "[variables('adfsVmDeployment')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('adfsproxyVMTemplateURL')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "subnetResourceID": {
+            "value": "[variables('WAPsubnetID')]"
+          },
+          "windowsImageSKU": {
+            "value": "[variables('OSVersion')]"
+          },
+          "vmName": {
+            "value": "[variables('adfsProxyVM2Name')]"
+          },
+          "vmSize": {
+            "value": "[variables('VMSize')]"
+          },
+          "NicName": {
+            "value": "[variables('adfsproxy2NICName')]"
+          },
+          "primaryIpAddress": {
+            "value": "[variables('primaryADFSProxy2IpAddress')]"
+          },
+          "domainName": {
+            "value": "[parameters('domainName')]"
+          },
+          "availabilitySetName": {
+            "value": "[variables('adfsProxyAvailabilitySetName')]"
+          },
+          "ouPath": {
+            "value": "[variables('ouPathT0Idenity')]"
+          },
+          "ilbID": {
+            "value": "[variables('ilbADFSProxyID')]"
+          }
+        }
+      }
+    },
+    {
+      "comments": "Install ADFS Role",
+      "name": "[variables('adfsFarmTemplatesDeployment')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "dependsOn": [
+        "[variables('adfsVmDeployment')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('adfsFarmTemplatesTemplateURL')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "adfsVMName": {
+            "value": "[variables('adfsVMName')]"
+          },
+          "primaryADFSserver": {
+            "value": "[variables('adfsVMName')]"
+          },
+          "domainName": {
+            "value": "[parameters('domainName')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "assetLocationStorageAccount": {
+            "value": "[variables('assetLocationStorageAccount')]"
+          },
+          "configurationFunction": {
+            "value": "[variables('configurationFunctionDSConADFSvm1')]"
+          },
+          "ADFSServiceCert": {
+            "value": "[parameters('ADFSServiceCert')]"
+          },
+          "storageAccountKeyviaKeyvault": {
+            "reference": {
+              "keyVault": {
+                "id": "[variables('keyVaultID')]"
+              },
+              "secretName": "[variables('secretName')]"
+            }
+          },
+          "storageAccountSASTokenviaKeyvault": {
+            "reference": {
+              "keyVault": {
+                "id": "[variables('keyVaultID')]"
+              },
+              "secretName": "[variables('secretnameSASurl')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "comments": "Deploy ADFS Farm on VM2",
+      "name": "[variables('adfsFarmTemplatesDeploymentonVM2')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "dependsOn": [
+        "[variables('adfsVm2Deployment')]",
+        "[variables('adfsFarmTemplatesDeployment')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('adfsFarmTemplatesTemplateURL')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "adfsVMName": {
+            "value": "[variables('adfsVM2Name')]"
+          },
+          "primaryADFSserver": {
+            "value": "[variables('adfsVMName')]"
+          },
+          "domainName": {
+            "value": "[parameters('domainName')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "assetLocationStorageAccount": {
+            "value": "[variables('assetLocationStorageAccount')]"
+          },
+          "configurationFunction": {
+            "value": "[variables('configurationFunctionDSConADFSvm2')]"
+          },
+          "ADFSServiceCert": {
+            "value": "[parameters('ADFSServiceCert')]"
+          },
+          "storageAccountKeyviaKeyvault": {
+            "reference": {
+              "keyVault": {
+                "id": "[variables('keyVaultID')]"
+              },
+              "secretName": "[variables('secretName')]"
+            }
+          },
+          "storageAccountSASTokenviaKeyvault": {
+            "reference": {
+              "keyVault": {
+                "id": "[variables('keyVaultID')]"
+              },
+              "secretName": "[variables('secretnameSASurl')]"
+            }
+          }
+        }
+      }
+    }
+  ],
   "outputs": {}
 }

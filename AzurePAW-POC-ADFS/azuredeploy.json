@@ -154,10 +154,7 @@
     "ilbTemplateURL": "[concat(variables('assetLocation'),'/data/ilbDeployment.json')]",
     "adfsVMTemplateURL": "[concat(variables('assetLocation'),'/data/adfsVm.json')]",
     "adfsProxyVMTemplateURL": "[concat(variables('assetLocation'),'/data/adfsProxyVm.json')]",
-    "adfsFarmTemplatesTemplateURL": "[concat(variables('assetLocation'),'/data/adfsfarm.json')]",
-    "deployADFSTemplateURL": "[concat(variables('assetLocation'),'/data/deployADFS.json')]",
-    "deployADFS2TemplateURL": "[concat(variables('assetLocation'),'/data/deployADFSonSecondVM.json')]",
-    "deployADFSProxyTemplateURL": "[concat(variables('assetLocation'),'/data/deployADFSProxy.json')]",
+    "adfsFarmTemplateURL": "[concat(variables('assetLocation'),'/data/adfsfarm.json')]",
 
     "adfsVMName": "[parameters('adfs1VMName')]",
     "adfsVM2Name": "[parameters('adfs2VMName')]",
@@ -506,7 +503,7 @@
       "properties": {
         "mode": "Incremental",
         "templateLink": {
-          "uri": "[variables('adfsFarmTemplatesTemplateURL')]",
+          "uri": "[variables('adfsFarmTemplateURL')]",
           "contentVersion": "1.0.0.0"
         },
         "parameters": {
@@ -565,7 +562,7 @@
       "properties": {
         "mode": "Incremental",
         "templateLink": {
-          "uri": "[variables('adfsFarmTemplatesTemplateURL')]",
+          "uri": "[variables('adfsFarmTemplateURL')]",
           "contentVersion": "1.0.0.0"
         },
         "parameters": {

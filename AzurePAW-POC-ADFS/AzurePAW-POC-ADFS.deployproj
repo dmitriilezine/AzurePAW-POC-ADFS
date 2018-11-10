@@ -25,13 +25,14 @@
   <ItemGroup>
     <Content Include="azuredeploy.json" />
     <Content Include="azuredeploy.parameters.json" />
+    <None Include="data\adfsfarm.json" />
+    <None Include="data\adfsProxyVm.json" />
+    <None Include="data\adfsVm.json" />
+    <None Include="data\ilbDeployment.json" />
     <None Include="Deployment.targets">
       <Visible>False</Visible>
     </None>
     <Content Include="Deploy-AzureResourceGroup.ps1" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="data\" />
   </ItemGroup>
   <Target Name="GetReferenceAssemblyPaths" />
 </Project>

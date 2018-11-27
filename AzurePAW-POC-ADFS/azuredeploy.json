@@ -275,6 +275,10 @@
       "name": "[variables('adfsVmDeployment')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2015-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/availabilitySets',variables('adfsAvailabilitySetName'))]",
+        "[variables('deployILBforADFS')]"
+      ],
       "properties": {
         "mode": "Incremental",
         "templateLink": {
@@ -332,6 +336,10 @@
       "name": "[variables('adfsVm2Deployment')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2015-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/availabilitySets',variables('adfsAvailabilitySetName'))]",
+        "[variables('deployILBforADFS')]"
+      ],
       "properties": {
         "mode": "Incremental",
         "templateLink": {

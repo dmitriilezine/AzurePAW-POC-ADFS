@@ -92,19 +92,6 @@
       },
       "defaultValue": "Standard_A2"
     },
-    "vNetIPSpace": {
-      "type": "string",
-      "defaultValue": "10.0",
-      "allowedValues": [
-        "10.0",
-        "10.1",
-        "10.2",
-        "10.3"
-      ],
-      "metadata": {
-        "description": "Specify the IP space for the vNet."
-      }
-    },
     "adfs1VMName": {
       "type": "string",
       "metadata": {
@@ -132,24 +119,73 @@
         "description": "Must be compliant with Windows Server naming convention"
       },
       "defaultValue": "ADFSP2-LAB"
+    },
+    "adfsVM1IPAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "IP Address for ADFS VM 1"
+      },
+      "defaultValue": "10.0.5.4"
+    },
+    "adfsVM2IPAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "IP Address for ADFS VM 2"
+      },
+      "defaultValue": "10.0.5.5"
+    },
+    "adfsProxyVM1IPAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "IP Address for ADFS Proxy VM 1"
+      },
+      "defaultValue": "10.0.6.4"
+    },
+    "adfsProxyVM2IPAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "IP Address for ADFS Proxy VM 2"
+      },
+      "defaultValue": "10.0.6.5"
+    },
+    "ILBforADFS": {
+      "type": "string",
+      "metadata": {
+        "description": "IP Address for ADFS farm ILB"
+      },
+      "defaultValue": "10.0.5.100"
+    },
+    "ILBforADFSProxy": {
+      "type": "string",
+      "metadata": {
+        "description": "IP Address for ADFS Proxy farm ILB"
+      },
+      "defaultValue": "10.0.6.100"
+    },
+    "ScriptsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account URL for scripts"
+      },
+      "defaultValue": "https://azurepaw.blob.core.windows.net"
     }
   },
   "variables": {
     "assetLocation": "https://raw.githubusercontent.com/dmitriilezine/AzurePAW-POC-ADFS/master/AzurePAW-POC-ADFS",
-    "assetLocationStorageAccount": "https://azurepaw.blob.core.windows.net",
+    "assetLocationStorageAccount": "[parameters('ScriptsLocation')]",
     "VMSize": "[parameters('VirtualMachineSize')]",
     "OSVersion": "2016-Datacenter",
 
     "ADFSsubnetID": "[resourceId(parameters('existingVirtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('existingVirtualNetworkName'), parameters('ADFSubnetName'))]",
     "WAPsubnetID": "[resourceId(parameters('existingVirtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('existingVirtualNetworkName'), parameters('WAPSubnetName'))]",
 
-    "primaryADFSIpAddress": "[concat(parameters('vNetIPSpace'),'.5.4')]",
-    "primaryADFS2IpAddress": "[concat(parameters('vNetIPSpace'),'.5.5')]",
-    "primaryADFSProxyIpAddress": "[concat(parameters('vNetIPSpace'),'.6.4')]",
-    "primaryADFSProxy2IpAddress": "[concat(parameters('vNetIPSpace'),'.6.5')]",
+    "primaryADFSIpAddress": "[parameters('adfsVM1IPAddress')]",
+    "primaryADFS2IpAddress": "[parameters('adfsVM2IPAddress')]",
+    "primaryADFSProxyIpAddress": "[parameters('adfsProxyVM1IPAddress')]",
+    "primaryADFSProxy2IpAddress": "[parameters('adfsProxyVM2IPAddress')]",
 
-    "ilbADFSprivateIPAddress": "[concat(parameters('vNetIPSpace'),'.5.100')]",
-    "ilbADFSProxyprivateIPAddress": "[concat(parameters('vNetIPSpace'),'.6.100')]",
+    "ilbADFSprivateIPAddress": "[parameters('ILBforADFS')]",
+    "ilbADFSProxyprivateIPAddress": "[parameters('ILBforADFSProxy')]",
 
     "ilbTemplateURL": "[concat(variables('assetLocation'),'/data/ilbDeployment.json')]",
     "adfsVMTemplateURL": "[concat(variables('assetLocation'),'/data/adfsVm.json')]",

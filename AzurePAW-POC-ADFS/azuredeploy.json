@@ -308,6 +308,9 @@
           },
           "ilbID": {
             "value": "[variables('ilbADFSID')]"
+          },
+          "diagnosticsStorageAccountName": {
+            "value": "[parameters('diagnosticsStorageAccountName')]"
           }
         }
       }
@@ -369,6 +372,9 @@
           },
           "ilbID": {
             "value": "[variables('ilbADFSID')]"
+          },
+          "diagnosticsStorageAccountName": {
+            "value": "[parameters('diagnosticsStorageAccountName')]"
           }
         }
       }
